@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Free Chat Room</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-database.js"></script>
+    <style>
+        /* CSS STYLES */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #chat-box {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px 12px;
+            background: #e1f5fe;
+            border-radius: 5px;
+        }
+        #message-input {
+            width: 70%;
+            padding: 8px;
+        }
+        #send-btn {
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        #typing-indicator {
+            color: #666;
+            font-size: 0.9em;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Simple Chat Room</h1>
+    
+    <!-- CHAT INTERFACE -->
+    <div id="chat-box"></div>
+    <div id="typing-indicator"></div>
+    <input type="text" id="message-input" placeholder="Type your message">
+    <button id="send-btn">Send</button>
+
+    <script>
+        // ======================
+        // FIREBASE CONFIGURATION
+        // ======================
+       // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDQlwnV3eHIVWrVvAq5WVYuzErzrXxAyhA",
+  authDomain: "wlcctest.firebaseapp.com",
+  databaseURL: "https://wlcctest-default-rtdb.firebaseio.com",
+  projectId: "wlcctest",
+  storageBucket: "wlcctest.firebasestorage.app",
+  messagingSenderId: "123171215561",
+  appId: "1:123171215561:web:45d8fec71287243e9b9518"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+        
+        // =================
+        // CHAT FUNCTIONALITY
+        // =================
+        // Get DOM elements
+        const chatBox = document.getElementById('chat-box');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const typingIndicator = document.getElementById('typing-indicator');
+        
+        // Set username (simple version)
+        let username = localStorage.getItem('chat_username') || 
+                      prompt("Enter your name") || 
+                      'User' + Math.floor(Math.random() * 1000);
+        localStorage.setItem('chat_username', username);
+        
+        // ======================
+        // MESSAGE FUNCTIONALITY
+        // ======================
+        // Listen for new messages
+        database.ref('messages').limitToLast(50).on('child_added', (snapshot) => {
+            const msg = snapshot.val();
+            const msgElement = document.createElement('div');
+            msgElement.className = 'message';
+            msgElement.innerHTML = `<strong>${msg.username}:</strong> ${msg.text}`;
+            chatBox.appendChild(msgElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+        
+        // Send message function
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if(message) {
+                database.ref('messages').push({
+                    username: username,
+                    text: message,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
+                messageInput.value = '';
+            }
+        }
+        
+        // Send button click
+        sendBtn.addEventListener('click', sendMessage);
+        
+        // Send on Enter key
+        messageInput.addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') sendMessage();
+        });
+        
+        // ======================
+        // TYPING INDICATOR
+        // ======================
+        // Show when user is typing
+        messageInput.addEventListener('input', () => {
+            database.ref('typing/' + username).set({
+                isTyping: messageInput.value.length > 0,
+                lastTyped: Date.now()
+            });
+        });
+        
+        // Listen for others typing
+        database.ref('typing').on('value', (snapshot) => {
+            const typers = [];
+            snapshot.forEach((child) => {
+                const typingData = child.val();
+                // Only show if actively typing (within last 3 seconds)
+                if(typingData.isTyping && Date.now() - typingData.lastTyped < 3000) {
+                    typers.push(child.key);
+                }
+            });
+            
+            typingIndicator.textContent = 
+                typers.length > 0 ? `${typers.join(', ')} is typing...` : '';
+        });
+        
+        // ======================
+        // CLEAN UP OLD MESSAGES
+        // ======================
+        function cleanOldMessages() {
+            database.ref('messages').orderByChild('timestamp')
+                .limitToFirst(1)
+                .once('value')
+                .then((snapshot) => {
+                    // Keep only the 100 most recent messages
+                    if(snapshot.numChildren() > 100) {
+                        snapshot.forEach((child) => {
+                            child.ref.remove();
+                        });
+                    }
+                });
+        }
+        
+        // Clean up every 5 minutes
+        setInterval(cleanOldMessages, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
