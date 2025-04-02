@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Chat Room</title>
+    <title>Chat Room with Name Change</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -53,6 +53,16 @@
             margin-left: 10px;
             padding: 8px 15px;
             background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+        }
+        #change-name-btn {
+            margin-left: 10px;
+            padding: 8px 15px;
+            background-color: #2196F3;
             color: white;
             border: none;
             border-radius: 4px;
@@ -109,7 +119,7 @@
     </style>
 </head>
 <body>
-    <h1>Global Chat Room</h1>
+    <h1>Chat Room</h1>
     <div id="chat-container">
         <div id="chat-box"></div>
         <div id="message-input">
@@ -118,6 +128,7 @@
             <input type="text" id="username" placeholder="Your name">
             <input type="text" id="message" placeholder="Type your message here...">
             <button id="send-btn">Send</button>
+            <button id="change-name-btn">Change Name</button>
         </div>
     </div>
 
@@ -142,6 +153,7 @@
             const messageInput = document.getElementById('message');
             const usernameInput = document.getElementById('username');
             const sendBtn = document.getElementById('send-btn');
+            const changeNameBtn = document.getElementById('change-name-btn');
             const namePrompt = document.getElementById('name-prompt');
             const nameDisplay = document.getElementById('name-display');
             
@@ -149,20 +161,12 @@
             const clearTriggerRef = ref(database, 'system/clearTrigger');
             
             // Check for saved name
-            const savedName = localStorage.getItem('chatUsername');
-            let currentUsername = savedName || '';
+            let currentUsername = localStorage.getItem('chatUsername') || '';
             let isReturningUser = false;
             
-            if (savedName) {
+            if (currentUsername) {
                 isReturningUser = true;
-                currentUsername = savedName;
-                nameDisplay.textContent = currentUsername;
-                nameDisplay.style.display = 'inline';
-                messageInput.style.display = 'block';
-                sendBtn.style.display = 'block';
-                usernameInput.style.display = 'none';
-                messageInput.focus();
-                
+                showChatInterface();
                 push(messagesRef, {
                     text: `Welcome back, ${currentUsername}!`,
                     username: 'System',
@@ -170,7 +174,36 @@
                     isSystem: true
                 });
             } else {
-                namePrompt.style.display = 'block';
+                showNameInput(true);
+            }
+            
+            function showChatInterface() {
+                nameDisplay.textContent = currentUsername;
+                nameDisplay.style.display = 'inline';
+                messageInput.style.display = 'block';
+                sendBtn.style.display = 'block';
+                changeNameBtn.style.display = 'inline-block';
+                usernameInput.style.display = 'none';
+                namePrompt.style.display = 'none';
+                messageInput.focus();
+            }
+            
+            function showNameInput(isFirstTime = false) {
+                if (isFirstTime) {
+                    namePrompt.style.display = 'block';
+                    namePrompt.textContent = "Please enter your name!";
+                    namePrompt.style.color = "#d32f2f";
+                } else {
+                    namePrompt.style.display = 'block';
+                    namePrompt.textContent = "Enter new name:";
+                    namePrompt.style.color = "#2196F3";
+                }
+                nameDisplay.style.display = 'none';
+                messageInput.style.display = 'none';
+                sendBtn.style.display = 'none';
+                changeNameBtn.style.display = 'none';
+                usernameInput.style.display = 'block';
+                usernameInput.value = currentUsername;
                 usernameInput.focus();
             }
             
@@ -204,11 +237,8 @@
             // Listen for clear triggers
             onValue(clearTriggerRef, (snapshot) => {
                 if (snapshot.exists() && snapshot.val().shouldClear) {
-                    // Clear local chat display
                     chatBox.innerHTML = '';
-                    // Add system message
                     addSystemMessage('Chat was cleared by ' + snapshot.val().clearedBy);
-                    // Reset the trigger
                     set(clearTriggerRef, { shouldClear: false, clearedBy: '' });
                 }
             });
@@ -216,28 +246,36 @@
             // Handle name submission
             usernameInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
-                    const name = usernameInput.value.trim();
-                    if (name) {
-                        currentUsername = name;
-                        localStorage.setItem('chatUsername', name);
-                        namePrompt.style.display = 'none';
-                        usernameInput.style.display = 'none';
-                        nameDisplay.textContent = name;
-                        nameDisplay.style.display = 'inline';
-                        messageInput.style.display = 'block';
-                        sendBtn.style.display = 'block';
-                        messageInput.focus();
-                        push(messagesRef, {
-                            text: `Everyone welcome ${name} to the chat!`,
-                            username: 'System',
-                            timestamp: serverTimestamp(),
-                            isSystem: true
-                        });
+                    const newName = usernameInput.value.trim();
+                    if (newName) {
+                        const oldName = currentUsername;
+                        currentUsername = newName;
+                        localStorage.setItem('chatUsername', newName);
+                        
+                        if (oldName) {
+                            // Name change
+                            addSystemMessage(`${oldName} is now known as ${newName}`);
+                            showChatInterface();
+                        } else {
+                            // First time user
+                            showChatInterface();
+                            push(messagesRef, {
+                                text: `Everyone welcome ${newName} to the chat!`,
+                                username: 'System',
+                                timestamp: serverTimestamp(),
+                                isSystem: true
+                            });
+                        }
                     } else {
                         namePrompt.textContent = "Please enter a valid name!";
                         namePrompt.style.color = "#d32f2f";
                     }
                 }
+            });
+            
+            // Change name button
+            changeNameBtn.addEventListener('click', function() {
+                showNameInput();
             });
             
             // Listen for new messages
@@ -263,16 +301,12 @@
                 if (message) {
                     if (message === '/clear') {
                         if (confirm('Are you sure you want to clear the chat for ALL users?')) {
-                            // Clear local chat immediately
                             chatBox.innerHTML = '';
-                            // Remove all messages from Firebase
                             await remove(messagesRef);
-                            // Set the clear trigger for other clients
                             await set(clearTriggerRef, { 
                                 shouldClear: true,
                                 clearedBy: currentUsername
                             });
-                            // Add system message
                             await push(messagesRef, {
                                 text: `Chat was cleared by ${currentUsername}`,
                                 username: 'System',
