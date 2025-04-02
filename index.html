@@ -11,13 +11,11 @@
             margin: 0 auto;
             padding: 20px;
         }
-        
         #chat-container {
             border: 1px solid #ccc;
             border-radius: 8px;
             overflow: hidden;
         }
-        
         #chat-box {
             height: 400px;
             overflow-y: auto;
@@ -26,20 +24,17 @@
             display: flex;
             flex-direction: column;
         }
-        
         #message-input {
             display: flex;
             padding: 10px;
             background-color: #eee;
         }
-        
         #name-prompt {
             color: #d32f2f;
             font-weight: bold;
             margin-bottom: 5px;
             display: none;
         }
-        
         #username {
             width: 120px;
             padding: 8px;
@@ -47,15 +42,13 @@
             border-radius: 4px;
             margin-right: 10px;
         }
-        
         #message {
             flex-grow: 1;
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            display: none; /* Initially hidden */
+            display: none;
         }
-        
         #send-btn {
             margin-left: 10px;
             padding: 8px 15px;
@@ -64,14 +57,12 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            display: none; /* Initially hidden */
+            display: none;
         }
-        
         .message-container {
             margin-bottom: 12px;
             width: 100%;
         }
-        
         .message {
             padding: 10px 15px;
             border-radius: 18px;
@@ -79,20 +70,17 @@
             max-width: 70%;
             word-wrap: break-word;
         }
-        
         .user-message {
             background-color: #dcf8c6;
             margin-left: auto;
             border-bottom-right-radius: 4px;
         }
-        
         .other-message {
             background-color: #ffffff;
             margin-right: auto;
             border-bottom-left-radius: 4px;
             box-shadow: 0 1px 1px rgba(0,0,0,0.1);
         }
-        
         .system-message {
             background-color: #f0f0f0;
             margin: 10px auto;
@@ -102,29 +90,31 @@
             width: 90%;
             border-radius: 4px;
         }
-        
         .message-info {
             font-size: 0.75em;
             color: #666;
             margin-bottom: 3px;
         }
-        
         .user-message .message-info {
             text-align: right;
         }
-        
         .other-message .message-info {
             text-align: left;
+        }
+        #name-display {
+            font-weight: bold;
+            margin-right: 10px;
+            display: none;
         }
     </style>
 </head>
 <body>
     <h1>Chat Room</h1>
-    
     <div id="chat-container">
         <div id="chat-box"></div>
         <div id="message-input">
             <div id="name-prompt">Please enter your name!</div>
+            <span id="name-display"></span>
             <input type="text" id="username" placeholder="Your name">
             <input type="text" id="message" placeholder="Type your message here...">
             <button id="send-btn">Send</button>
@@ -132,11 +122,9 @@
     </div>
 
     <script type="module">
-        // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-        import { getDatabase, ref, push, onChildAdded, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-database.js";
+        import { getDatabase, ref, push, onChildAdded, onValue, serverTimestamp, remove, set } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-database.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyDQlwnV3eHIVWrVvAq5WVYuzErzrXxAyhA",
             authDomain: "wlcctest.firebaseapp.com",
@@ -146,7 +134,6 @@
             appId: "1:123171215561:web:45d8fec71287243e9b9518"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
 
@@ -156,64 +143,88 @@
             const usernameInput = document.getElementById('username');
             const sendBtn = document.getElementById('send-btn');
             const namePrompt = document.getElementById('name-prompt');
+            const nameDisplay = document.getElementById('name-display');
             
-            // Show name prompt and focus on username field
-            namePrompt.style.display = 'block';
-            usernameInput.focus();
+            // Track if we've cleared the chat to prevent duplicate system messages
+            let chatCleared = false;
+            const clearFlagRef = ref(database, 'clearFlag');
             
-            // Track current user
-            let currentUsername = '';
+            // Check for saved name
+            const savedName = localStorage.getItem('chatUsername');
+            let currentUsername = savedName || '';
+            let isReturningUser = false;
             
-            // Function to add a system message
+            if (savedName) {
+                isReturningUser = true;
+                currentUsername = savedName;
+                nameDisplay.textContent = currentUsername;
+                nameDisplay.style.display = 'inline';
+                messageInput.style.display = 'block';
+                sendBtn.style.display = 'block';
+                usernameInput.style.display = 'none';
+                messageInput.focus();
+                
+                push(ref(database, 'messages'), {
+                    text: `Welcome back, ${currentUsername}!`,
+                    username: 'System',
+                    timestamp: serverTimestamp(),
+                    isSystem: true
+                });
+            } else {
+                namePrompt.style.display = 'block';
+                usernameInput.focus();
+            }
+            
             function addSystemMessage(text) {
                 const container = document.createElement('div');
                 container.classList.add('message-container');
-                
                 const messageElement = document.createElement('div');
                 messageElement.classList.add('message', 'system-message');
                 messageElement.textContent = text;
-                
                 container.appendChild(messageElement);
                 chatBox.appendChild(container);
-                
-                // Scroll to the bottom of the chat box
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
             
-            // Function to add a user message
             function addUserMessage(username, message, timestamp, isCurrentUser = false) {
                 const container = document.createElement('div');
                 container.classList.add('message-container');
-                
                 const infoElement = document.createElement('div');
                 infoElement.classList.add('message-info');
                 infoElement.textContent = `${username} • ${new Date(timestamp).toLocaleTimeString()}`;
-                
                 const messageElement = document.createElement('div');
                 messageElement.classList.add('message');
                 messageElement.classList.add(isCurrentUser ? 'user-message' : 'other-message');
                 messageElement.textContent = message;
-                
                 container.appendChild(infoElement);
                 container.appendChild(messageElement);
                 chatBox.appendChild(container);
-                
-                // Scroll to the bottom of the chat box
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
             
-            // When username is entered, enable chat
+            // Listen for clear flag changes
+            onValue(clearFlagRef, (snapshot) => {
+                if (snapshot.exists() && snapshot.val().cleared) {
+                    chatBox.innerHTML = '';
+                    addSystemMessage('Chat was cleared');
+                    set(clearFlagRef, { cleared: false }); // Reset flag
+                }
+            });
+            
+            // Handle name submission
             usernameInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     const name = usernameInput.value.trim();
                     if (name) {
                         currentUsername = name;
+                        localStorage.setItem('chatUsername', name);
                         namePrompt.style.display = 'none';
+                        usernameInput.style.display = 'none';
+                        nameDisplay.textContent = name;
+                        nameDisplay.style.display = 'inline';
                         messageInput.style.display = 'block';
                         sendBtn.style.display = 'block';
                         messageInput.focus();
-                        
-                        // Post welcome message to chat
                         push(ref(database, 'messages'), {
                             text: `Everyone welcome ${name} to the chat!`,
                             username: 'System',
@@ -231,7 +242,7 @@
             const messagesRef = ref(database, 'messages');
             onChildAdded(messagesRef, (snapshot) => {
                 const messageData = snapshot.val();
-                if (!currentUsername) return; // Don't show messages before name is entered
+                if (!currentUsername) return;
                 
                 if (messageData.isSystem) {
                     addSystemMessage(messageData.text);
@@ -245,28 +256,34 @@
                 }
             });
             
-            // Send message when button is clicked
+            // Send message
             sendBtn.addEventListener('click', function() {
                 const message = messageInput.value.trim();
-                
                 if (message) {
-                    // Push message to Firebase
+                    if (message === '/clear') {
+                        if (confirm('Are you sure you want to clear the chat for everyone?')) {
+                            // Set flag to trigger clear for all users
+                            set(clearFlagRef, { cleared: true });
+                            // Clear local chat immediately
+                            chatBox.innerHTML = '';
+                            // Add local system message
+                            addSystemMessage('Chat was cleared');
+                        }
+                        messageInput.value = '';
+                        return;
+                    }
+                    
                     push(messagesRef, {
                         text: message,
                         username: currentUsername,
                         timestamp: serverTimestamp()
                     });
-                    
-                    // Clear the input field
                     messageInput.value = '';
                 }
             });
             
-            // Also send message when Enter key is pressed
             messageInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    sendBtn.click();
-                }
+                if (e.key === 'Enter') sendBtn.click();
             });
         });
     </script>
