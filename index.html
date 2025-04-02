@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stacked Chat Messages</title>
+    <title>Chat Room</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -33,6 +33,13 @@
             background-color: #eee;
         }
         
+        #name-prompt {
+            color: #d32f2f;
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: none;
+        }
+        
         #username {
             width: 120px;
             padding: 8px;
@@ -46,6 +53,7 @@
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
+            display: none; /* Initially hidden */
         }
         
         #send-btn {
@@ -56,6 +64,7 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            display: none; /* Initially hidden */
         }
         
         .message-container {
@@ -105,8 +114,9 @@
     <div id="chat-container">
         <div id="chat-box"></div>
         <div id="message-input">
-            <input type="text" id="username" placeholder="Your name" value="Anonymous">
-            <input type="text" id="message" placeholder="Type your message here..." autofocus>
+            <div id="name-prompt">Please enter your name!</div>
+            <input type="text" id="username" placeholder="Your name">
+            <input type="text" id="message" placeholder="Type your message here...">
             <button id="send-btn">Send</button>
         </div>
     </div>
@@ -135,11 +145,30 @@
             const messageInput = document.getElementById('message');
             const usernameInput = document.getElementById('username');
             const sendBtn = document.getElementById('send-btn');
+            const namePrompt = document.getElementById('name-prompt');
+            
+            // Show name prompt and focus on username field
+            namePrompt.style.display = 'block';
+            usernameInput.focus();
             
             // Track current user
-            let currentUsername = usernameInput.value;
-            usernameInput.addEventListener('change', () => {
-                currentUsername = usernameInput.value.trim() || "Anonymous";
+            let currentUsername = '';
+            
+            // When username is entered, enable chat
+            usernameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const name = usernameInput.value.trim();
+                    if (name) {
+                        currentUsername = name;
+                        namePrompt.style.display = 'none';
+                        messageInput.style.display = 'block';
+                        sendBtn.style.display = 'block';
+                        messageInput.focus();
+                    } else {
+                        namePrompt.textContent = "Please enter a valid name!";
+                        namePrompt.style.color = "#d32f2f";
+                    }
+                }
             });
             
             // Function to add a message to the chat box
@@ -170,19 +199,20 @@
             const messagesRef = ref(database, 'messages');
             onChildAdded(messagesRef, (snapshot) => {
                 const messageData = snapshot.val();
-                addMessage(messageData.username, messageData.text, messageData.timestamp);
+                if (currentUsername) { // Only show messages after name is entered
+                    addMessage(messageData.username, messageData.text, messageData.timestamp);
+                }
             });
             
             // Send message when button is clicked
             sendBtn.addEventListener('click', function() {
                 const message = messageInput.value.trim();
-                const username = currentUsername;
                 
                 if (message) {
                     // Push message to Firebase
                     push(messagesRef, {
                         text: message,
-                        username: username,
+                        username: currentUsername,
                         timestamp: serverTimestamp()
                     });
                     
