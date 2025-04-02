@@ -93,6 +93,16 @@
             box-shadow: 0 1px 1px rgba(0,0,0,0.1);
         }
         
+        .system-message {
+            background-color: #f0f0f0;
+            margin: 10px auto;
+            text-align: center;
+            font-style: italic;
+            color: #666;
+            width: 90%;
+            border-radius: 4px;
+        }
+        
         .message-info {
             font-size: 0.75em;
             color: #666;
@@ -154,27 +164,24 @@
             // Track current user
             let currentUsername = '';
             
-            // When username is entered, enable chat
-            usernameInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    const name = usernameInput.value.trim();
-                    if (name) {
-                        currentUsername = name;
-                        namePrompt.style.display = 'none';
-                        messageInput.style.display = 'block';
-                        sendBtn.style.display = 'block';
-                        messageInput.focus();
-                    } else {
-                        namePrompt.textContent = "Please enter a valid name!";
-                        namePrompt.style.color = "#d32f2f";
-                    }
-                }
-            });
-            
-            // Function to add a message to the chat box
-            function addMessage(username, message, timestamp) {
-                const isCurrentUser = username === currentUsername;
+            // Function to add a system message
+            function addSystemMessage(text) {
+                const container = document.createElement('div');
+                container.classList.add('message-container');
                 
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message', 'system-message');
+                messageElement.textContent = text;
+                
+                container.appendChild(messageElement);
+                chatBox.appendChild(container);
+                
+                // Scroll to the bottom of the chat box
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+            
+            // Function to add a user message
+            function addUserMessage(username, message, timestamp, isCurrentUser = false) {
                 const container = document.createElement('div');
                 container.classList.add('message-container');
                 
@@ -195,12 +202,46 @@
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
             
+            // When username is entered, enable chat
+            usernameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const name = usernameInput.value.trim();
+                    if (name) {
+                        currentUsername = name;
+                        namePrompt.style.display = 'none';
+                        messageInput.style.display = 'block';
+                        sendBtn.style.display = 'block';
+                        messageInput.focus();
+                        
+                        // Post welcome message to chat
+                        push(ref(database, 'messages'), {
+                            text: `Everyone welcome ${name} to the chat!`,
+                            username: 'System',
+                            timestamp: serverTimestamp(),
+                            isSystem: true
+                        });
+                    } else {
+                        namePrompt.textContent = "Please enter a valid name!";
+                        namePrompt.style.color = "#d32f2f";
+                    }
+                }
+            });
+            
             // Listen for new messages
             const messagesRef = ref(database, 'messages');
             onChildAdded(messagesRef, (snapshot) => {
                 const messageData = snapshot.val();
-                if (currentUsername) { // Only show messages after name is entered
-                    addMessage(messageData.username, messageData.text, messageData.timestamp);
+                if (!currentUsername) return; // Don't show messages before name is entered
+                
+                if (messageData.isSystem) {
+                    addSystemMessage(messageData.text);
+                } else {
+                    addUserMessage(
+                        messageData.username, 
+                        messageData.text, 
+                        messageData.timestamp,
+                        messageData.username === currentUsername
+                    );
                 }
             });
             
